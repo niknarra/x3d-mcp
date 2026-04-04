@@ -70,7 +70,8 @@ class TestGenerateNode:
 
     def test_invalid_field(self):
         result = generate_node("Box", {"nonexistent_field": 42})
-        assert "Error" in result
+        assert "Invalid field" in result
+        assert "x3d_node_info" in result
 
 
 class TestAddNodeToScene:
@@ -92,7 +93,8 @@ class TestAddNodeToScene:
         scene = generate_scene_template("Interchange")
         node = "<Box/>"
         result = add_node_to_scene(scene, node, parent_def="NonExistent")
-        assert "No node found" in result
+        assert "NonExistent" in result
+        assert "x3d_list_defs" in result
 
     def test_invalid_scene_xml(self):
         result = add_node_to_scene("not xml", "<Box/>")

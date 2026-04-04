@@ -4,10 +4,19 @@ Generates valid-by-construction X3D content using the official Python
 Scene Access Interface Library, plus X3DOM HTML page wrapping.
 """
 
+import io
 import logging
+import sys
 from lxml import etree
 
-import x3d as x3dlib
+# x3d.py prints a banner to stdout on import, which corrupts the
+# MCP JSON-RPC stream. Suppress it by redirecting stdout temporarily.
+_real_stdout = sys.stdout
+sys.stdout = io.StringIO()
+try:
+    import x3d as x3dlib
+finally:
+    sys.stdout = _real_stdout
 
 from src.validation import validate_x3d_string
 
@@ -83,10 +92,14 @@ def generate_node(node_name: str, fields: dict | None = None) -> str:
     """
     node_class = getattr(x3dlib, node_name, None)
     if node_class is None:
-        return f"Unknown X3D node: '{node_name}'. Use x3d_search_nodes to find valid node names."
+        return (
+            f"Unknown X3D node: '{node_name}'. "
+            f"Use x3d_search_nodes('{node_name}') to find matching node names, "
+            f"or x3d_list_components() to browse by component."
+        )
 
     if not isinstance(node_class, type):
-        return f"'{node_name}' is not an X3D node class."
+        return f"'{node_name}' is not an X3D node type (it may be a constant or utility in x3d.py)."
 
     fields = fields or {}
 
@@ -94,7 +107,11 @@ def generate_node(node_name: str, fields: dict | None = None) -> str:
         node = node_class(**fields)
         return node.XML()
     except TypeError as e:
-        return f"Error creating {node_name}: {e}. Use x3d_node_info('{node_name}') to see valid fields."
+        return (
+            f"Invalid field for {node_name}: {e}. "
+            f"Use x3d_node_info('{node_name}') to see the valid fields, "
+            f"types, and default values for this node."
+        )
     except Exception as e:
         return f"Error creating {node_name}: {e}"
 
@@ -114,25 +131,31 @@ def add_node_to_scene(scene_xml: str, node_xml: str, parent_def: str = "") -> st
         parser = etree.XMLParser(remove_blank_text=True)
         scene_tree = etree.fromstring(scene_xml.encode(), parser)
     except etree.XMLSyntaxError as e:
-        return f"Error parsing scene XML: {e}"
+        return f"Error parsing scene XML: {e}. Ensure the scene_xml is a complete X3D document."
 
     try:
-        # Parse the node to insert
         node_tree = etree.fromstring(node_xml.encode(), parser)
     except etree.XMLSyntaxError as e:
-        return f"Error parsing node XML: {e}"
+        return (
+            f"Error parsing node XML: {e}. "
+            f"Use x3d_generate_node() to create well-formed node fragments."
+        )
 
-    # Find insertion point
     if parent_def:
-        # Search for element with matching DEF attribute
         parent = scene_tree.xpath(f"//*[@DEF='{parent_def}']")
         if not parent:
-            return f"No node found with DEF='{parent_def}' in the scene."
+            return (
+                f"No node with DEF='{parent_def}' found in the scene. "
+                f"Use x3d_list_defs() to see available DEF names."
+            )
         parent[0].append(node_tree)
     else:
         scene_el = scene_tree.find("Scene")
         if scene_el is None:
-            return "No <Scene> element found in the X3D document."
+            return (
+                "No <Scene> element found. The X3D document must have "
+                "the structure <X3D><Scene>...</Scene></X3D>."
+            )
         scene_el.append(node_tree)
 
     # Serialize back

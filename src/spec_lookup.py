@@ -19,8 +19,16 @@ def get_node_info(node_name: str) -> str:
         suggestions = uom.search_nodes(node_name)
         if suggestions:
             names = ", ".join(s["name"] for s in suggestions[:8])
-            return f"Node '{node_name}' not found. Did you mean: {names}?"
-        return f"Node '{node_name}' not found in X3D 4.0 specification."
+            return (
+                f"Node '{node_name}' not found in the X3D 4.0 specification. "
+                f"Did you mean: {names}? "
+                f"Use x3d_search_nodes('{node_name}') for a broader search."
+            )
+        return (
+            f"Node '{node_name}' not found in the X3D 4.0 specification. "
+            f"Use x3d_search_nodes() to search by keyword, "
+            f"or x3d_list_components() to browse all available nodes."
+        )
 
     lines = [
         f"# {node['name']}",
@@ -213,7 +221,12 @@ def get_field_type_info(field_type: str) -> str:
                 lines.append(f"- `{e['value']}`: {e['appinfo']}")
         return "\n".join(lines)
 
-    return f"Field type '{field_type}' not found. X3D field types use SF/MF prefix (e.g., SFVec3f, MFString)."
+    return (
+        f"Field type '{field_type}' not found. "
+        f"X3D field types use the SF (single) or MF (multiple) prefix "
+        f"followed by the base type (e.g., SFVec3f, MFString, SFColor, SFRotation). "
+        f"Enumeration types from the spec are also supported (e.g., alphaModeChoices)."
+    )
 
 
 def search_nodes(query: str) -> str:
@@ -222,7 +235,11 @@ def search_nodes(query: str) -> str:
     results = uom.search_nodes(query)
 
     if not results:
-        return f"No nodes found matching '{query}'."
+        return (
+            f"No nodes found matching '{query}'. "
+            f"Try a broader term (e.g., 'light', 'texture', 'geometry') "
+            f"or use x3d_list_components() to browse by component."
+        )
 
     lines = [f"# Search results for '{query}' ({len(results)} matches)", ""]
     for r in results[:25]:
@@ -240,11 +257,17 @@ def check_node_hierarchy(parent_node: str, child_node: str) -> str:
 
     parent = uom.get_node(parent_node)
     if parent is None:
-        return f"Parent node '{parent_node}' not found in X3D 4.0."
+        return (
+            f"Parent node '{parent_node}' not found in X3D 4.0. "
+            f"Use x3d_search_nodes('{parent_node}') to find the correct name."
+        )
 
     child = uom.get_node(child_node)
     if child is None:
-        return f"Child node '{child_node}' not found in X3D 4.0."
+        return (
+            f"Child node '{child_node}' not found in X3D 4.0. "
+            f"Use x3d_search_nodes('{child_node}') to find the correct name."
+        )
 
     # Check which fields of the parent accept nodes
     all_fields = uom.get_all_fields(parent_node)
@@ -275,8 +298,8 @@ def check_node_hierarchy(parent_node: str, child_node: str) -> str:
 
     return (
         f"**Not directly valid.** '{child_node}' is not an accepted child of '{parent_node}' "
-        f"based on its field type constraints. Check the spec for '{parent_node}' to see "
-        f"which node types are accepted in each field."
+        f"based on the X3D 4.0 field type constraints. "
+        f"Use x3d_node_info('{parent_node}') to see which node types each field accepts."
     )
 
 

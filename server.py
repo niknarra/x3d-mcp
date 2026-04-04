@@ -26,6 +26,12 @@ from src.generation import (
     generate_x3dom_page,
     generate_x3dom_template,
 )
+from src.file_ops import (
+    extract_node as extract_x3d_node,
+    list_defs,
+    parse_x3d_scene,
+    scene_stats,
+)
 
 # Configure logging to stderr (stdout is reserved for MCP JSON-RPC)
 logging.basicConfig(
@@ -45,7 +51,9 @@ mcp = FastMCP(
         "Use the spec lookup tools to get authoritative information about X3D nodes, fields, "
         "components, and profiles directly from the X3D Unified Object Model (X3DUOM). "
         "Use the generation tools to create valid X3D scenes, individual nodes, and X3DOM HTML pages. "
-        "When generating X3D content, always validate the output before returning it to the user."
+        "Use the file operations tools to parse, analyze, and extract nodes from existing X3D content. "
+        "When generating X3D content, always validate the output before returning it to the user. "
+        "Use the prompts (build_scene, audit_scene, convert_to_x3dom) for guided multi-step workflows."
     ),
 )
 
@@ -291,6 +299,166 @@ def x3dom_starter() -> str:
     Save the output as an .html file and open it in any modern browser.
     """
     return generate_x3dom_template()
+
+
+# ──────────────────────────────────────────────
+# Prompts: Guided Workflows
+# ──────────────────────────────────────────────
+
+@mcp.prompt()
+def build_scene(description: str = "a simple 3D scene") -> str:
+    """Step-by-step guide to build an X3D scene from scratch.
+
+    Walks through creating a template, adding geometry with materials,
+    validating, and rendering in the browser via X3DOM.
+    """
+    return (
+        f"Build an X3D scene: {description}\n\n"
+        "Follow these steps using the X3D MCP tools:\n\n"
+        "1. **Create a template:** Call x3d_scene_template(profile='Interchange', "
+        "title='<your title>') to get a valid starting document with viewpoint and lighting.\n\n"
+        "2. **Look up nodes:** Use x3d_search_nodes('<keyword>') to find the right geometry, "
+        "then x3d_node_info('<NodeName>') to see available fields, types, and defaults.\n\n"
+        "3. **Generate nodes:** Use x3d_generate_node('<NodeName>', '{...fields...}') to create "
+        "each node. Wrap geometry in Shape > Appearance > Material for visible objects.\n\n"
+        "4. **Compose the scene:** Use x3d_add_node(scene_xml, node_xml) to insert each node. "
+        "Use parent_def to nest nodes inside DEF'd parents (e.g., inside a Transform).\n\n"
+        "5. **Validate:** Call validate_x3d(scene_xml) to check the result against the "
+        "official X3D 4.0 schema. Fix any errors before proceeding.\n\n"
+        "6. **Render:** Call x3dom_page(scene_xml, title='<title>') to produce a standalone "
+        "HTML file. Save it as .html and open in any browser.\n\n"
+        "Key X3D patterns:\n"
+        "- Shape = Appearance (Material + optional Texture) + Geometry (Box, Sphere, etc.)\n"
+        "- Transform wraps children with translation/rotation/scale\n"
+        "- DEF names let you reference nodes later\n"
+        "- SFColor is 3 floats in [0,1] (e.g., 1 0 0 = red)\n"
+        "- SFRotation is axis-angle: x y z angle_in_radians"
+    )
+
+
+@mcp.prompt()
+def audit_scene(filepath: str = "") -> str:
+    """Guide to analyze and audit an existing X3D file.
+
+    Walks through parsing, getting stats, validating, and reporting issues.
+    """
+    source_hint = f"'{filepath}'" if filepath else "the X3D file or XML string"
+    return (
+        f"Audit the X3D scene at {source_hint}.\n\n"
+        "Follow these steps using the X3D MCP tools:\n\n"
+        "1. **Parse the scene graph:** Call x3d_parse_scene(<source>) to see the full "
+        "node hierarchy with DEF names and key attributes.\n\n"
+        "2. **Get statistics:** Call x3d_scene_stats(<source>) to see node counts by type "
+        "and component, DEF'd vs anonymous nodes, and profile info.\n\n"
+        "3. **List named nodes:** Call x3d_list_defs(<source>) to see all DEF'd nodes "
+        "with their parents and children.\n\n"
+        "4. **Validate:** Call validate_x3d(<source>) to check the document against the "
+        "official X3D 4.0 schema and report any violations.\n\n"
+        "5. **Inspect specific nodes:** Use x3d_extract_node(<source>, def_name='<name>') "
+        "to get the full XML of interesting nodes. Use x3d_node_info('<NodeType>') to check "
+        "if field values are within spec constraints.\n\n"
+        "6. **Report:** Summarize findings including: profile/version, scene complexity, "
+        "any schema violations, potential issues (missing DEF names, unused nodes, etc.)."
+    )
+
+
+@mcp.prompt()
+def convert_to_x3dom() -> str:
+    """Guide to convert X3D content into a browser-viewable X3DOM HTML page."""
+    return (
+        "Convert X3D content to an X3DOM HTML page for browser viewing.\n\n"
+        "Follow these steps:\n\n"
+        "1. **Get the X3D content:** Either load from a file using x3d_parse_scene(<path>) "
+        "to verify it first, or use the raw X3D XML string.\n\n"
+        "2. **Validate first:** Call validate_x3d(<content>) to ensure the X3D is valid "
+        "before converting.\n\n"
+        "3. **Convert to X3DOM:** Call x3dom_page(x3d_content=<content>, title='<title>', "
+        "width='800px', height='600px'). The tool accepts either a full X3D document or "
+        "raw scene nodes.\n\n"
+        "4. **Save and open:** Save the returned HTML string as a .html file and open it "
+        "in any modern browser (Chrome, Firefox, Safari, Edge). The X3DOM library loads "
+        "from CDN -- no installation needed.\n\n"
+        "Options:\n"
+        "- Set width/height to '100%' for full-page rendering\n"
+        "- Set show_stats=True to show the rendering stats overlay\n"
+        "- For a quick demo, use x3dom_starter() to get a ready-made example page"
+    )
+
+
+# ──────────────────────────────────────────────
+# Phase 4: File Operations Tools
+# ──────────────────────────────────────────────
+
+@mcp.tool()
+def x3d_parse_scene(x3d_source: str) -> str:
+    """Parse X3D content and display the scene graph as an indented tree.
+
+    Shows every node in the scene hierarchy with its DEF name (if any) and
+    key attribute values. Use this to understand the structure of an existing
+    X3D scene before modifying or analyzing it.
+
+    Args:
+        x3d_source: Either an absolute file path to a .x3d file, or a complete
+                    X3D XML document string. The tool auto-detects which.
+    """
+    return parse_x3d_scene(x3d_source)
+
+
+@mcp.tool()
+def x3d_scene_stats(x3d_source: str) -> str:
+    """Get statistics about an X3D scene: node counts by type and component.
+
+    Returns total node count, DEF'd vs anonymous nodes, node type breakdown,
+    and grouping by X3D component (Geometry3D, Lighting, Shape, etc.).
+    Use this for a quick overview before diving deeper.
+
+    Args:
+        x3d_source: Either an absolute file path to a .x3d file, or a complete
+                    X3D XML document string.
+    """
+    return scene_stats(x3d_source)
+
+
+@mcp.tool()
+def x3d_list_defs(x3d_source: str) -> str:
+    """List all DEF'd (named) nodes in an X3D scene.
+
+    DEF names are unique identifiers assigned to nodes in X3D, similar to
+    HTML id attributes. Returns each DEF name with the node type, parent,
+    and children for context. Use this to find targets for x3d_extract_node
+    or x3d_add_node.
+
+    Args:
+        x3d_source: Either an absolute file path to a .x3d file, or a complete
+                    X3D XML document string.
+    """
+    return list_defs(x3d_source)
+
+
+@mcp.tool()
+def x3d_extract_node(
+    x3d_source: str,
+    def_name: str = "",
+    node_type: str = "",
+    index: int = 0,
+) -> str:
+    """Extract a specific node (and its children) from an X3D scene as XML.
+
+    Identify the target node by its DEF name, or by node type + index. Returns
+    the full XML subtree of the matched node. If both def_name and node_type
+    are given, def_name takes precedence.
+
+    Args:
+        x3d_source: Either an absolute file path to a .x3d file, or a complete
+                    X3D XML document string.
+        def_name: The DEF name of the node to extract (e.g., "RedSphere").
+                  Use x3d_list_defs to see available names.
+        node_type: The X3D node type to extract (e.g., "Material", "Transform").
+                   Combined with index to select which instance.
+        index: 0-based index when extracting by node_type. Default 0 (first match).
+               Use x3d_scene_stats to see how many of each type exist.
+    """
+    return extract_x3d_node(x3d_source, def_name, node_type, index)
 
 
 def main():

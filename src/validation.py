@@ -72,17 +72,26 @@ def validate_x3d_string(x3d_xml: str) -> dict:
     if valid:
         summary = "Valid X3D 4.0 document. No schema violations found."
     else:
-        summary = f"Invalid X3D document. Found {len(errors)} error(s):\n"
+        summary = f"Invalid X3D document. Found {len(errors)} schema violation(s):\n"
         for i, err in enumerate(errors[:10], 1):
-            # Truncate very long error messages
-            err_str = str(err)
-            if len(err_str) > 500:
-                err_str = err_str[:500] + "..."
+            err_str = _humanize_validation_error(str(err))
             summary += f"\n{i}. {err_str}"
         if len(errors) > 10:
             summary += f"\n\n... and {len(errors) - 10} more error(s)."
+        summary += (
+            "\n\nUse x3d_node_info('<NodeName>') to check valid fields and types, "
+            "or x3d_check_hierarchy to verify parent-child relationships."
+        )
 
     return {"valid": valid, "errors": errors[:20], "summary": summary}
+
+
+def _humanize_validation_error(err: str) -> str:
+    """Make xmlschema error messages more readable with X3D context."""
+    if len(err) > 500:
+        err = err[:500] + "..."
+    err = err.replace("failed validating", "Schema violation:")
+    return err
 
 
 def validate_x3d_file(filepath: str) -> dict:
