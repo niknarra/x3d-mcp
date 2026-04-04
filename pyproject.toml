@@ -1,0 +1,16 @@
+[project]
+name = "x3d-mcp"
+version = "0.1.0"
+description = "MCP server for X3D (Extensible 3D Graphics) — validation, spec lookup, and scene generation"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "lxml>=6.0.2",
+    "mcp[cli]>=1.27.0",
+    "x3d>=4.0.65.3",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
