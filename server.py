@@ -32,6 +32,17 @@ from src.file_ops import (
     parse_x3d_scene,
     scene_stats,
 )
+from src.scene_manipulation import (
+    modify_node,
+    remove_node,
+    move_node,
+)
+from src.semantic_check import semantic_check
+from src.animation import (
+    animate,
+    add_route,
+    animation_info,
+)
 
 # Configure logging to stderr (stdout is reserved for MCP JSON-RPC)
 logging.basicConfig(
@@ -52,8 +63,11 @@ mcp = FastMCP(
         "components, and profiles directly from the X3D Unified Object Model (X3DUOM). "
         "Use the generation tools to create valid X3D scenes, individual nodes, and X3DOM HTML pages. "
         "Use the file operations tools to parse, analyze, and extract nodes from existing X3D content. "
+        "Use the scene manipulation tools to modify, remove, or move nodes within existing scenes. "
+        "Use the semantic check tool for deeper analysis beyond XSD (missing geometry, broken ROUTEs, etc.). "
+        "Use the animation tools to create TimeSensor + Interpolator + ROUTE chains for animations. "
         "When generating X3D content, always validate the output before returning it to the user. "
-        "Use the prompts (build_scene, audit_scene, convert_to_x3dom) for guided multi-step workflows."
+        "Use the prompts (build_scene, audit_scene, convert_to_x3dom, animate_scene) for guided workflows."
     ),
 )
 
@@ -352,13 +366,15 @@ def audit_scene(filepath: str = "") -> str:
         "and component, DEF'd vs anonymous nodes, and profile info.\n\n"
         "3. **List named nodes:** Call x3d_list_defs(<source>) to see all DEF'd nodes "
         "with their parents and children.\n\n"
-        "4. **Validate:** Call validate_x3d(<source>) to check the document against the "
+        "4. **Schema validation:** Call validate_x3d(<source>) to check the document against the "
         "official X3D 4.0 schema and report any violations.\n\n"
-        "5. **Inspect specific nodes:** Use x3d_extract_node(<source>, def_name='<name>') "
+        "5. **Semantic analysis:** Call x3d_semantic_check(<source>) for deeper checks: "
+        "missing geometry, empty groups, broken ROUTE references, duplicate DEFs, etc.\n\n"
+        "6. **Inspect specific nodes:** Use x3d_extract_node(<source>, def_name='<name>') "
         "to get the full XML of interesting nodes. Use x3d_node_info('<NodeType>') to check "
         "if field values are within spec constraints.\n\n"
-        "6. **Report:** Summarize findings including: profile/version, scene complexity, "
-        "any schema violations, potential issues (missing DEF names, unused nodes, etc.)."
+        "7. **Report:** Summarize findings including: profile/version, scene complexity, "
+        "any schema violations, semantic issues, and recommendations."
     )
 
 
@@ -459,6 +475,208 @@ def x3d_extract_node(
                Use x3d_scene_stats to see how many of each type exist.
     """
     return extract_x3d_node(x3d_source, def_name, node_type, index)
+
+
+# ──────────────────────────────────────────────
+# Phase 5: Scene Manipulation Tools
+# ──────────────────────────────────────────────
+
+@mcp.tool()
+def x3d_modify_node(x3d_source: str, def_name: str, field_changes: str) -> str:
+    """Modify field values on a DEF'd node in an X3D scene.
+
+    Finds the node by its DEF name and updates the specified attributes.
+    Returns the complete modified X3D XML document.
+
+    Args:
+        x3d_source: Complete X3D XML document string or file path.
+        def_name: The DEF name of the node to modify (e.g., "RedMat", "MainView").
+        field_changes: JSON string of field=value changes to apply.
+                       Example: '{"diffuseColor": "0 1 0", "transparency": "0.5"}'
+                       Values are set as XML attribute strings.
+    """
+    import json
+    try:
+        changes = json.loads(field_changes)
+    except json.JSONDecodeError as e:
+        return f"Invalid JSON for field_changes: {e}. Pass a JSON object like '{{\"diffuseColor\": \"0 1 0\"}}'"
+    return modify_node(x3d_source, def_name, changes)
+
+
+@mcp.tool()
+def x3d_remove_node(
+    x3d_source: str,
+    def_name: str = "",
+    node_type: str = "",
+    index: int = 0,
+) -> str:
+    """Remove a node (and its children) from an X3D scene.
+
+    Identifies the target by DEF name, or by node_type + index. Returns
+    the modified X3D XML document with the node removed.
+
+    Args:
+        x3d_source: Complete X3D XML document string or file path.
+        def_name: DEF name of the node to remove. Takes precedence over node_type.
+                  Use x3d_list_defs to see available names.
+        node_type: Node type to remove (e.g., "DirectionalLight", "Transform").
+                   Combined with index to select which instance.
+        index: 0-based index when removing by node_type. Default 0 (first match).
+    """
+    return remove_node(x3d_source, def_name, node_type, index)
+
+
+@mcp.tool()
+def x3d_move_node(x3d_source: str, def_name: str, new_parent_def: str = "") -> str:
+    """Reparent a node from its current parent to a new parent in the scene graph.
+
+    Detaches the node (by DEF name) from its current location and appends it
+    as a child of the new parent. Detects and prevents cycles.
+
+    Args:
+        x3d_source: Complete X3D XML document string or file path.
+        def_name: DEF name of the node to move.
+        new_parent_def: DEF name of the new parent node. Leave empty to move
+                        to be a direct child of <Scene>.
+    """
+    return move_node(x3d_source, def_name, new_parent_def)
+
+
+# ──────────────────────────────────────────────
+# Phase 6: Semantic Validation Tools
+# ──────────────────────────────────────────────
+
+@mcp.tool()
+def x3d_semantic_check(x3d_source: str) -> str:
+    """Run semantic checks on an X3D scene beyond XSD schema validation.
+
+    Detects common authoring issues that XSD cannot catch:
+    - Shape nodes missing geometry or appearance
+    - Empty grouping nodes (Transform, Group with no children)
+    - Duplicate DEF names
+    - USE referencing non-existent DEF
+    - ROUTE referencing invalid DEF names, fields, or mismatched types
+    - Missing Viewpoint
+
+    Returns a structured report of errors, warnings, and informational notes.
+
+    Args:
+        x3d_source: Complete X3D XML document string or file path.
+    """
+    return semantic_check(x3d_source)
+
+
+# ──────────────────────────────────────────────
+# Phase 7: Animation & Interaction Tools
+# ──────────────────────────────────────────────
+
+@mcp.tool()
+def x3d_animate(
+    x3d_source: str,
+    target_def: str,
+    field_name: str,
+    from_value: str,
+    to_value: str,
+    duration: float = 5.0,
+    loop: bool = True,
+) -> str:
+    """Generate a complete X3D animation chain and insert it into a scene.
+
+    Creates a TimeSensor, the appropriate Interpolator (auto-selected based
+    on the target field's type), and ROUTE statements to wire them together.
+    Inserts all nodes into the scene and returns the modified X3D document.
+
+    Args:
+        x3d_source: Complete X3D XML document string or file path.
+        target_def: DEF name of the node to animate (e.g., "MyTransform").
+        field_name: Field to animate. Examples:
+                    - "rotation" → OrientationInterpolator
+                    - "translation" → PositionInterpolator
+                    - "diffuseColor" → ColorInterpolator
+                    - "transparency" → ScalarInterpolator
+        from_value: Starting value as a space-separated string (e.g., "0 1 0 0").
+        to_value: Ending value as a space-separated string (e.g., "0 1 0 6.283").
+        duration: Animation cycle duration in seconds. Default 5.0.
+        loop: Whether the animation loops continuously. Default True.
+    """
+    return animate(x3d_source, target_def, field_name, from_value, to_value, duration, loop)
+
+
+@mcp.tool()
+def x3d_route(
+    x3d_source: str,
+    from_node: str,
+    from_field: str,
+    to_node: str,
+    to_field: str,
+) -> str:
+    """Validate and insert a ROUTE statement into an X3D scene.
+
+    ROUTEs connect event outputs to event inputs in X3D's event system.
+    This tool validates that both DEF names exist, field names are valid,
+    access types are compatible, and field types match before inserting.
+
+    Args:
+        x3d_source: Complete X3D XML document string or file path.
+        from_node: DEF name of the source node.
+        from_field: Output field on the source (must be outputOnly or inputOutput).
+        to_node: DEF name of the destination node.
+        to_field: Input field on the destination (must be inputOnly or inputOutput).
+    """
+    return add_route(x3d_source, from_node, from_field, to_node, to_field)
+
+
+@mcp.tool()
+def x3d_animation_info(topic: str = "") -> str:
+    """Explain X3D animation concepts and list available interpolators.
+
+    Provides reference documentation about X3D's event-driven animation system.
+    Call with no topic for a general overview.
+
+    Args:
+        topic: Focus area. Options:
+               - "interpolators": list all interpolator nodes with field mappings
+               - "timesensor": TimeSensor fields and outputs reference
+               - "routes": ROUTE syntax, rules, and patterns
+               - "examples": common animation code patterns
+               - "": general overview of the animation system
+    """
+    return animation_info(topic)
+
+
+# ──────────────────────────────────────────────
+# Additional Prompts
+# ──────────────────────────────────────────────
+
+@mcp.prompt()
+def animate_scene(target_description: str = "a rotating object") -> str:
+    """Step-by-step guide to add animation to an X3D scene."""
+    return (
+        f"Add animation to an X3D scene: {target_description}\n\n"
+        "Follow these steps using the X3D MCP tools:\n\n"
+        "1. **Understand the animation system:** Call x3d_animation_info() for an overview "
+        "of how X3D animations work (TimeSensor → Interpolator → ROUTE).\n\n"
+        "2. **Parse the scene:** Call x3d_parse_scene(<source>) to see the scene structure "
+        "and identify DEF names of nodes you want to animate.\n\n"
+        "3. **Check the target field:** Use x3d_node_info('<NodeType>') to verify the field "
+        "you want to animate exists and note its type (SFRotation, SFVec3f, SFColor, etc.).\n\n"
+        "4. **Look up interpolator info:** Call x3d_animation_info('interpolators') to see "
+        "which interpolator matches your field type, and x3d_animation_info('examples') "
+        "for common patterns.\n\n"
+        "5. **Generate the animation:** Call x3d_animate(scene, target_def='<DEF>', "
+        "field_name='<field>', from_value='<start>', to_value='<end>', "
+        "duration=<seconds>, loop=True) to auto-generate the full animation chain.\n\n"
+        "6. **Validate:** Call validate_x3d(result) to check the animated scene, "
+        "then x3d_semantic_check(result) for deeper analysis.\n\n"
+        "7. **Render:** Call x3dom_page(result, title='<title>') to create an HTML page "
+        "and view the animation in a browser.\n\n"
+        "Common animation targets:\n"
+        "- **rotation**: SFRotation (axis-angle: x y z angle_radians)\n"
+        "- **translation**: SFVec3f (x y z position)\n"
+        "- **diffuseColor**: SFColor (r g b in [0,1])\n"
+        "- **transparency**: SFFloat (0 = opaque, 1 = invisible)\n"
+        "- **scale**: SFVec3f (x y z scale factors)"
+    )
 
 
 def main():

@@ -39,7 +39,7 @@ _TREE_ATTRS = {
 # Shared Infrastructure
 # ─────────────────────────────────────────
 
-def _parse_x3d_source(source: str) -> etree._Element:
+def parse_x3d_source(source: str) -> etree._Element:
     """Parse an X3D source (file path or inline XML string) into an lxml tree.
 
     Raises ValueError with a descriptive message on failure.
@@ -79,7 +79,7 @@ def _parse_x3d_source(source: str) -> etree._Element:
         raise ValueError(f"Invalid XML in file '{stripped}': {e}")
 
 
-def _find_scene(tree: etree._Element) -> etree._Element:
+def find_scene(tree: etree._Element) -> etree._Element:
     """Find the <Scene> element in a parsed X3D tree."""
     scene = tree.find("Scene")
     if scene is None:
@@ -100,12 +100,12 @@ def parse_x3d_scene(source: str) -> str:
     Accepts a file path or inline X3D XML string.
     """
     try:
-        tree = _parse_x3d_source(source)
+        tree = parse_x3d_source(source)
     except ValueError as e:
         return str(e)
 
     try:
-        scene = _find_scene(tree)
+        scene = find_scene(tree)
     except ValueError as e:
         return str(e)
 
@@ -175,12 +175,12 @@ def scene_stats(source: str) -> str:
     Accepts a file path or inline X3D XML string.
     """
     try:
-        tree = _parse_x3d_source(source)
+        tree = parse_x3d_source(source)
     except ValueError as e:
         return str(e)
 
     try:
-        scene = _find_scene(tree)
+        scene = find_scene(tree)
     except ValueError as e:
         return str(e)
 
@@ -250,12 +250,12 @@ def list_defs(source: str) -> str:
     Accepts a file path or inline X3D XML string.
     """
     try:
-        tree = _parse_x3d_source(source)
+        tree = parse_x3d_source(source)
     except ValueError as e:
         return str(e)
 
     try:
-        scene = _find_scene(tree)
+        scene = find_scene(tree)
     except ValueError as e:
         return str(e)
 
@@ -315,12 +315,12 @@ def extract_node(
         )
 
     try:
-        tree = _parse_x3d_source(source)
+        tree = parse_x3d_source(source)
     except ValueError as e:
         return str(e)
 
     try:
-        scene = _find_scene(tree)
+        scene = find_scene(tree)
     except ValueError as e:
         return str(e)
 
