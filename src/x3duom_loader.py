@@ -130,6 +130,7 @@ class X3DUOM:
         self._load_abstract_node_types(root)
         self._load_concrete_nodes(root)
         self._load_profiles(root)
+        self._enrich_with_tooltips()
 
         logger.info(
             "X3DUOM loaded: %d concrete nodes, %d abstract types, %d components, %d profiles",
@@ -202,6 +203,27 @@ class X3DUOM:
                     for enum in field_el.findall("enumeration"):
                         self.profiles[enum.get("value", "")] = enum.get("appinfo", "")
                     break
+
+    def _enrich_with_tooltips(self):
+        """Overlay richer tooltip descriptions onto loaded nodes and fields."""
+        from src.tooltip_loader import get_tooltips
+
+        tooltips = get_tooltips()
+        if not tooltips:
+            return
+
+        for node_name, node_data in self.concrete_nodes.items():
+            entry = tooltips.get(node_name)
+            if not entry:
+                continue
+            if entry.get("_node"):
+                node_data["appinfo"] = entry["_node"]
+            for field in node_data["fields"]:
+                field_tooltip = entry.get(field["name"])
+                if field_tooltip:
+                    field["description"] = field_tooltip
+
+        logger.info("Tooltip enrichment applied to %d nodes", len(tooltips))
 
     def get_node(self, name: str) -> dict | None:
         """Look up a concrete node by name."""
