@@ -90,7 +90,8 @@ def _format_field(field: dict, brief: bool = False) -> str:
     line = " ".join(parts)
 
     if not brief and field.get("description"):
-        line += f"\n  {field['description']}"
+        desc = field["description"].replace("\n", "\n  ")
+        line += f"\n  {desc}"
 
     if not brief and field.get("enumerations"):
         vals = ", ".join(e["value"] for e in field["enumerations"])
