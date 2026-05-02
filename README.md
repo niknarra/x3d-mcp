@@ -8,7 +8,7 @@ X3D (Extensible 3D Graphics) is the ISO standard (ISO/IEC 19775) for representin
 
 - **Validation** -- Validate X3D content against the official X3D 4.0 XML Schema (26,000+ line XSD), catching invalid nodes, wrong attribute types, and hierarchy violations
 - **Semantic Checks** -- Catch real-world authoring bugs that XSD can't: missing geometry on shapes, empty grouping nodes, broken DEF/USE references, duplicate DEF names, ROUTEs with invalid fields or mismatched types, and missing viewpoints
-- **Spec Lookup** -- Query the full X3D Unified Object Model: 200+ concrete nodes, field types with constraints, inheritance chains, component/profile browsing, and parent-child hierarchy checking
+- **Spec Lookup** -- Query the full X3D Unified Object Model: 200+ concrete nodes, field types with constraints, inheritance chains, component/profile browsing, and parent-child hierarchy checking. Node and field descriptions are enriched at startup with human-readable authoring guidance — Hints and Warnings — sourced from the official X3D-Edit tooltip profile (`x3d-4.0.profile.xml`)
 - **Scene Generation** -- Programmatically create X3D content via the official x3d.py library (X3DPSAIL), manipulate scenes with targeted node insertion, and convert to standalone X3DOM HTML pages for browser rendering
 - **Scene Manipulation** -- Complete CRUD on existing scenes: modify field values on DEF'd nodes, remove nodes by DEF or type+index, and reparent nodes with cycle detection
 - **Animation & Interaction** -- Auto-generate full TimeSensor + Interpolator + ROUTE chains from a target DEF and field name (the correct interpolator is selected based on the field's type), validate and insert individual ROUTEs with full type/access-type checking, and look up animation reference docs
@@ -235,6 +235,8 @@ flowchart TD
 
     Validation --> XSD["spec/x3d-4.0.xsd"]
     X3DUOM --> UOM["spec/X3dUnifiedObjectModel-4.0.xml"]
+    X3DUOM --> Tooltips["src/tooltip_loader.py\ntooltip enrichment"]
+    Tooltips --> Profile["wiki/x3d-4.0.profile.xml\nX3D-Edit authoring profile"]
 
     Generation --> Validation
 ```
@@ -243,7 +245,8 @@ flowchart TD
 |------|------|
 | `server.py` | MCP entry point. Registers all 24 tools and 4 prompts with `FastMCP` and runs the stdio transport. |
 | `src/validation.py` | Loads the X3D 4.0 XSD via `xmlschema`, strips namespace/DOCTYPE processing instructions, and validates XML strings or files. |
-| `src/x3duom_loader.py` | Parses the 43,000-line X3DUOM XML into in-memory dictionaries. Resolves full inheritance chains to collect all fields for any node. Singleton via `lru_cache`. |
+| `src/x3duom_loader.py` | Parses the 43,000-line X3DUOM XML into in-memory dictionaries. Resolves full inheritance chains to collect all fields for any node. At load time calls `tooltip_loader` to overlay richer descriptions. Singleton via `lru_cache`. |
+| `src/tooltip_loader.py` | Parses `wiki/x3d-4.0.profile.xml` (the X3D-Edit authoring profile) and indexes per-node and per-field tooltip text — including human-readable descriptions, authoring Hints, and Warnings from the Web3D Consortium. Merged into the X3DUOM index at startup. |
 | `src/spec_lookup.py` | Query layer over the X3DUOM index: node info, search, component/profile listing, field type documentation, hierarchy checking with inheritance-aware type matching. |
 | `src/generation.py` | Constructs X3D nodes via the official x3d.py (X3DPSAIL) library, manipulates scene trees with lxml, and converts X3D XML to X3DOM-compatible HTML (lowercase tags, explicit closing tags, namespace stripping). |
 | `src/file_ops.py` | Reads and analyzes existing X3D content: scene graph tree view, statistics by type/component, DEF node listing, and node extraction. Exposes `parse_x3d_source` and `find_scene` as the shared parsing foundation used by the manipulation, semantic, and animation modules. |
@@ -251,6 +254,7 @@ flowchart TD
 | `src/semantic_check.py` | Authoring-level checks beyond XSD: shape completeness, empty grouping nodes, duplicate DEFs, DEF/USE consistency, ROUTE validity (DEF refs + field names + access types + type matching), and missing viewpoints. |
 | `src/animation.py` | Auto-generates TimeSensor + Interpolator + ROUTE chains for animations (the correct interpolator is selected from the target field's type via X3DUOM lookup), validates and inserts individual ROUTEs, and provides reference documentation for X3D's event-driven animation system. |
 | `spec/` | Bundled official spec files: X3D 4.0 XSD (with Web3D extension schemas) and the X3D Unified Object Model XML. |
+| `wiki/x3d-4.0.profile.xml` | X3D-Edit authoring profile from the Web3D Consortium (Don Brutzman). Contains rich tooltip text for every X3D 4.0 node and attribute — used by `tooltip_loader.py` to enrich spec lookup output. |
 
 ## Development
 
