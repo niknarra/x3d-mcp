@@ -1,5 +1,8 @@
 # x3d-mcp
 
+> **This project has been adopted by the Web3D Consortium.**
+> Development continues at [Web3DConsortium/x3d_mcp](https://github.com/Web3DConsortium/x3d_mcp), the official MCP server for X3D under the [AI with X3D Special Interest Group](https://www.web3d.org/working-groups/ai-x3d). This repository is preserved as the origin implementation and for publication credit.
+
 An MCP server that gives AI models the ability to validate, look up, generate, analyze, and render [X3D](https://www.web3d.org/x3d/what-x3d) content.
 
 X3D (Extensible 3D Graphics) is the ISO standard (ISO/IEC 19775) for representing 3D scenes and objects in XML. The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) is a standard that lets AI models call external tools. This server bridges the two: it exposes 24 tools and 4 workflow prompts that let an AI work with X3D using authoritative spec data rather than training-data guesses, produce schema-valid output, animate it, and render it in a browser.
